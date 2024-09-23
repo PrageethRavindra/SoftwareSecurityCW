@@ -23,7 +23,7 @@ $role = $_SESSION['role'];
 $conn = getDBConnection();
 
 // Prepare and execute query to fetch user details
-$stmt = $conn->prepare("SELECT username, email FROM users WHERE email = :email");
+$stmt = $conn->prepare("SELECT id, username, email FROM users WHERE email = :email");
 $stmt->bindParam(':email', $email);
 $stmt->execute();
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -32,6 +32,7 @@ $user = $stmt->fetch(PDO::FETCH_ASSOC);
 if ($user) {
     $username = $user['username'];
     $userEmail = $user['email'];
+    $userId = $user['id']; // Get user ID for the Edit Profile link
 } else {
     // Redirect to login page if user is not found
     header("Location: login.php");
@@ -44,15 +45,14 @@ if ($role === 'admin') {
     $activity_stmt = $conn->prepare("
         SELECT activity, activity_time 
         FROM activity_log 
-        WHERE user_id = (SELECT id FROM users WHERE email = :email)
+        WHERE user_id = :user_id
     ");
-    $activity_stmt->bindParam(':email', $email);
+    $activity_stmt->bindParam(':user_id', $userId);
     $activity_stmt->execute();
     $activities = $activity_stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 $conn = null; // Close the database connection
-
 ?>
 
 <!-- HTML Content for the Dashboard -->
@@ -140,9 +140,9 @@ $conn = null; // Close the database connection
         <p class="welcome-message">Welcome, <?php echo htmlspecialchars($username); ?>!</p>
         <p class="details">Your email: <?php echo htmlspecialchars($userEmail); ?></p>
 
-        <a href="../auth/edit_user.php" class="edit-profile-button">Edit Profile</a>
+        <!-- Make sure the Edit Profile button correctly links to the edit_user.php page -->
+        <a href="edit_user.php?user_id=<?php echo $userId; ?>" class="edit-profile-button">Edit Profile</a>
         <a href="../auth/logout.php" class="logout-button" onclick="confirmLogout(event)">Logout</a>
-
 
         <!-- Display admin activities if the user is an admin -->
         <?php if ($role === 'admin' && !empty($activities)): ?>

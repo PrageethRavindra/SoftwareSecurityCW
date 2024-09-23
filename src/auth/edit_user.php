@@ -1,8 +1,8 @@
 <?php
 session_start();
 
-// Check if the user is logged in and is an admin
-if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'admin') {
+// Check if the user is logged in and is an admin or if user is trying to edit their own profile
+if (!isset($_SESSION['email'])) {
     header("Location: login.php");
     exit();
 }
@@ -14,8 +14,8 @@ require_once __DIR__ . '/../db/connection.php';
 $conn = getDBConnection();
 
 // Fetch the user data for the user to be edited
-if (isset($_POST['user_id'])) {
-    $user_id = $_POST['user_id'];
+if (isset($_GET['user_id'])) {
+    $user_id = $_GET['user_id'];
 
     // Handle form submission to update user details
     if (isset($_POST['edit_user'])) {
@@ -33,7 +33,7 @@ if (isset($_POST['user_id'])) {
             $stmt->execute();
             
             // Redirect back to the dashboard after updating
-            header("Location: admin_dashboard.php");
+            header("Location: dashboard.php");
             exit();
         } catch (PDOException $e) {
             echo "Error updating record: " . $e->getMessage();
@@ -48,7 +48,7 @@ if (isset($_POST['user_id'])) {
     $stmt->closeCursor();
 } else {
     // Redirect if no user_id is provided
-    header("Location: admin_dashboard.php");
+    header("Location: dashboard.php");
     exit();
 }
 ?>
@@ -75,7 +75,6 @@ if (isset($_POST['user_id'])) {
             background-color: #fff;
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            transition: all 0.3s ease;
         }
         h2 {
             text-align: center;
@@ -102,14 +101,6 @@ if (isset($_POST['user_id'])) {
             width: 100%;
             box-sizing: border-box;
             background-color: #f9f9f9;
-            transition: background-color 0.2s ease;
-        }
-        input[type="text"]:focus,
-        input[type="email"]:focus,
-        select:focus {
-            background-color: #e8f0fe;
-            outline: none;
-            border-color: #4CAF50;
         }
         button {
             padding: 12px;
@@ -119,7 +110,6 @@ if (isset($_POST['user_id'])) {
             border: none;
             border-radius: 6px;
             cursor: pointer;
-            transition: background-color 0.2s ease;
         }
         button:hover {
             background-color: #45a049;
@@ -130,35 +120,13 @@ if (isset($_POST['user_id'])) {
             margin-top: 20px;
             color: #007BFF;
             text-decoration: none;
-            font-weight: bold;
-            transition: color 0.2s ease;
-        }
-        .back-link:hover {
-            text-decoration: underline;
-            color: #0056b3;
-        }
-        @media (max-width: 768px) {
-            .container {
-                width: 90%;
-                margin: 20px auto;
-            }
-            button {
-                font-size: 14px;
-                padding: 10px;
-            }
-            input[type="text"],
-            input[type="email"],
-            select {
-                padding: 10px;
-                font-size: 12px;
-            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <h2>Edit User</h2>
-        <form action="edit_user.php" method="post">
+        <form action="edit_user.php?user_id=<?php echo $user_id; ?>" method="post">
             <input type="hidden" name="user_id" value="<?php echo htmlspecialchars($user['id']); ?>">
             <label for="username">Username</label>
             <input type="text" name="username" value="<?php echo htmlspecialchars($user['username']); ?>" required>
@@ -171,7 +139,7 @@ if (isset($_POST['user_id'])) {
             </select>
             <button type="submit" name="edit_user">Save Changes</button>
         </form>
-        <a href="admin_dashboard.php" class="back-link">Back to Dashboard</a>
+        <a href="dashboard.php" class="back-link">Back to Dashboard</a>
     </div>
 </body>
 </html>
