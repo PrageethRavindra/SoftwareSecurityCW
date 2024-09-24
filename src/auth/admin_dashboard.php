@@ -44,6 +44,27 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['delete_user'])) {
     exit();
 }
 
+// Handle unlock user request
+if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['unlock_user'])) {
+    $user_id = $_POST['user_id'];
+
+    // Use prepared statement to unlock the user account
+    $unlock_stmt = $conn->prepare("UPDATE users SET locked = 0 WHERE id = :id");
+    $unlock_stmt->bindParam(':id', $user_id);
+    $unlock_stmt->execute();
+
+    // Log the unlocking in activity log
+    $activity = "Unlocked user with ID: " . $user_id;
+    $log_stmt = $conn->prepare("INSERT INTO activity_log (user_id, activity) VALUES (:user_id, :activity)");
+    $log_stmt->bindParam(':user_id', $_SESSION['user_id']); // Log the admin's activity
+    $log_stmt->bindParam(':activity', $activity);
+    $log_stmt->execute();
+
+    // Redirect to refresh the page after unlocking
+    header("Location: admin_dashboard.php");
+    exit();
+}
+
 // Handle registration request (combined signup logic)
 $success_message = $error_message = '';
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['register_user'])) {
@@ -93,7 +114,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['register_user'])) {
             $log_stmt->execute();
             
             // Set success message
-            $success_message = "User registration successful.!";
+            $success_message = "User registration successful!";
         } else {
             $error_message = "Error occurred during registration. Please try again.";
         }
@@ -103,7 +124,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['register_user'])) {
 }
 
 // Get all users from the database
-$user_stmt = $conn->prepare("SELECT id, username, email, role FROM users");
+$user_stmt = $conn->prepare("SELECT id, username, email, role, locked FROM users");
 $user_stmt->execute();
 $users = $user_stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -236,33 +257,23 @@ $conn = null;
     <script>
         // Simple form validation
         function validateForm() {
-            const username = document.getElementById('username').value;
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-            const emailPattern = /^[^ ]+@[^ ]+\.[a-z]{2,3}$/;
+            const username = document.forms["registerForm"]["username"].value;
+            const email = document.forms["registerForm"]["email"].value;
+            const password = document.forms["registerForm"]["password"].value;
             let valid = true;
 
-            if (username === '') {
-                document.getElementById('username-error').style.display = 'block';
+            if (username == "") {
+                alert("Username must be filled out");
                 valid = false;
-            } else {
-                document.getElementById('username-error').style.display = 'none';
             }
-
-            if (!email.match(emailPattern)) {
-                document.getElementById('email-error').style.display = 'block';
+            if (email == "") {
+                alert("Email must be filled out");
                 valid = false;
-            } else {
-                document.getElementById('email-error').style.display = 'none';
             }
-
-            if (password === '') {
-                document.getElementById('password-error').style.display = 'block';
+            if (password == "") {
+                alert("Password must be filled out");
                 valid = false;
-            } else {
-                document.getElementById('password-error').style.display = 'none';
             }
-
             return valid;
         }
     </script>
@@ -270,41 +281,56 @@ $conn = null;
 <body>
     <div class="container">
         <h2>Admin Dashboard</h2>
+        
+        <!-- Registration Form -->
+        <div class="register-form">
+            <h3>Register New User</h3>
+            <form name="registerForm" action="admin_dashboard.php" method="post" onsubmit="return validateForm();">
+                <input type="text" name="username" placeholder="Username" required>
+                <input type="email" name="email" placeholder="Email" required>
+                <input type="password" name="password" placeholder="Password" required>
+                <button type="submit" name="register_user">Register User</button>
+            </form>
+            <?php if (!empty($error_message)) : ?>
+                <p class="error"><?php echo htmlspecialchars($error_message); ?></p>
+            <?php endif; ?>
+            <?php if (!empty($success_message)) : ?>
+                <p class="success"><?php echo htmlspecialchars($success_message); ?></p>
+            <?php endif; ?>
+        </div>
 
-       <!-- Logout Button -->
-       <form method="post" action="../auth/logout.php" onsubmit="return confirmLogout();">
-            <button type="submit" name="logout" class="logout-button">Logout</button>
-        </form>
-
-        <!-- Display Success or Error Message -->
-        <?php if ($success_message): ?>
-            <p style="color:green;"><?php echo $success_message; ?></p>
-        <?php elseif ($error_message): ?>
-            <p style="color:red;"><?php echo $error_message; ?></p>
-        <?php endif; ?>
-
-        <!-- All Users Table -->
+        <!-- Users Table -->
+        <h3>All Users</h3>
         <table>
             <tr>
                 <th>ID</th>
                 <th>Username</th>
                 <th>Email</th>
                 <th>Role</th>
+                <th>Status</th>
                 <th>Actions</th>
             </tr>
             <?php foreach ($users as $user) : ?>
-                <tr>
+                <tr style="<?php echo $user['locked'] ? 'background-color: red; color: white;' : ''; ?>">
                     <td><?php echo htmlspecialchars($user['id']); ?></td>
                     <td><?php echo htmlspecialchars($user['username']); ?></td>
                     <td><?php echo htmlspecialchars($user['email']); ?></td>
                     <td><?php echo htmlspecialchars($user['role']); ?></td>
+                    <td><?php echo $user['locked'] ? 'Locked' : 'Active'; ?></td>
                     <td>
-                        <!-- Edit Button -->
-                        <form action="edit_user.php" method="post" style="display:inline;">
-                            <input type="hidden" name="user_id" value="<?php echo $user['id']; ?>">
-                            <button type="submit" class="edit-button">Edit</button>
-                        </form>
-
+                        <?php if ($user['locked']): ?>
+                            <!-- Unlock Button for Locked Users -->
+                            <form action="admin_dashboard.php" method="post" style="display:inline;">
+                                <input type="hidden" name="user_id" value="<?php echo $user['id']; ?>">
+                                <button type="submit" name="unlock_user" class="edit-button">Unlock</button>
+                            </form>
+                        <?php else: ?>
+                            <!-- Edit Button -->
+                            <form action="edit_user.php" method="post" style="display:inline;">
+                                <input type="hidden" name="user_id" value="<?php echo $user['id']; ?>">
+                                <button type="submit" class="edit-button">Edit</button>
+                            </form>
+                        <?php endif; ?>
                         <!-- Delete Button -->
                         <form action="admin_dashboard.php" method="post" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this user?');">
                             <input type="hidden" name="user_id" value="<?php echo $user['id']; ?>">
@@ -315,40 +341,23 @@ $conn = null;
             <?php endforeach; ?>
         </table>
 
-        <!-- Register New User Form -->
-        <h2>Register New User</h2>
-        <form action="admin_dashboard.php" method="post" class="register-form" onsubmit="return validateForm()">
-            <label for="username">Username</label>
-            <input type="text" name="username" id="username" required>
-            <span class="error" id="username-error">Please enter a username.</span>
-
-            <label for="email">Email</label>
-            <input type="email" name="email" id="email" required>
-            <span class="error" id="email-error">Please enter a valid email address.</span>
-
-            <label for="password">Password</label>
-            <input type="password" name="password" id="password" required>
-            <span class="error" id="password-error">Please enter a password.</span>
-
-            <label for="role">Role</label>
-            <select name="role" id="role" required>
-                <option value="student">Student</option>
-                <option value="admin">Admin</option>
-            </select>
-
-            <button type="submit" name="register_user">Register User</button>
+        <!-- Logout Button -->
+        <form action="admin_dashboard.php" method="post">
+            <button type="submit" name="logout" class="logout-button">Logout</button>
         </form>
 
         <!-- Activity Log -->
-        <h2>Activity Log</h2>
+        <h3>Activity Log</h3>
         <table>
             <tr>
+                <th>ID</th>
                 <th>Username</th>
                 <th>Activity</th>
                 <th>Timestamp</th>
             </tr>
             <?php foreach ($activity_logs as $log) : ?>
                 <tr>
+                    <td><?php echo htmlspecialchars($log['id']); ?></td>
                     <td><?php echo htmlspecialchars($log['username']); ?></td>
                     <td><?php echo htmlspecialchars($log['activity']); ?></td>
                     <td><?php echo htmlspecialchars($log['timestamp']); ?></td>

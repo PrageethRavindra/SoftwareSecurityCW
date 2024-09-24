@@ -1,36 +1,59 @@
 <?php
-session_start();  // Always start session at the top of the script
-ob_start();  // Start output buffering
+session_start();
+ob_start();
 
-require_once __DIR__ . '/../db/connection.php';  // Ensure correct path to db connection file
+require_once __DIR__ . '/../db/connection.php';
 
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-$error_message = '';  // Initialize error message variable
-
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    // Get the database connection
     $conn = getDBConnection();
 
-    // Sanitize user inputs
     $email = filter_input(INPUT_POST, 'email', FILTER_SANITIZE_EMAIL);
     $pass = filter_input(INPUT_POST, 'password', FILTER_SANITIZE_STRING);
 
-    // Validate email format
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $error_message = "Invalid email format.";
+    if (empty($email) || empty($pass)) {
+        $_SESSION['error_message'] = "Please fill in all fields.";
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $_SESSION['error_message'] = "Please enter a valid email address.";
+    } elseif (strlen($pass) < 6) {
+        $_SESSION['error_message'] = "Password must be at least 6 characters long.";
     } else {
         try {
-            // Prepare the SELECT statement to check for the email
+            // Check for existing failed login attempts within the last 5 minutes
+            $stmt = $conn->prepare("SELECT COUNT(*) as attempts, MAX(attempt_time) as last_attempt FROM failed_logins WHERE email = :email AND attempt_time > NOW() - INTERVAL 5 MINUTE");
+            $stmt->bindParam(':email', $email);
+            $stmt->execute();
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            $failed_attempts = $result['attempts'];
+            $last_attempt_time = $result['last_attempt'];
+
+            // Lock account if there have been 3 failed attempts within the last 5 minutes
+            if ($failed_attempts >= 3) {
+                // Calculate time since the last failed attempt
+                $lock_duration = 300; // 5 minutes in seconds
+                $time_since_last_attempt = time() - strtotime($last_attempt_time);
+
+                if ($time_since_last_attempt < $lock_duration) {
+                    $_SESSION['error_message'] = "Your account has been locked due to too many failed login attempts. Please try again after " . (5 - floor($time_since_last_attempt / 60)) . " minutes.";
+                    header("Location: /SoftwareS/login.php");
+                    exit;
+                } else {
+                    // Reset failed attempts after lock duration has expired
+                    $stmt = $conn->prepare("DELETE FROM failed_logins WHERE email = :email");
+                    $stmt->bindParam(':email', $email);
+                    $stmt->execute();
+                }
+            }
+
+            // Check if the email exists
             $stmt = $conn->prepare("SELECT id, username, password, role FROM users WHERE email = :email");
             $stmt->bindParam(':email', $email);
             $stmt->execute();
 
-            // Check if a user exists with that email
             if ($stmt->rowCount() > 0) {
-                // Fetch the user data
                 $user = $stmt->fetch(PDO::FETCH_ASSOC);
                 $user_id = $user['id'];
                 $username = $user['username'];
@@ -39,35 +62,47 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
                 // Verify the password
                 if (password_verify($pass, $hashed_password)) {
-                    // Regenerate session ID
                     session_regenerate_id(true);
-
-                    // Store session data
                     $_SESSION['user_id'] = $user_id;
                     $_SESSION['email'] = $email;
                     $_SESSION['username'] = $username;
                     $_SESSION['role'] = $role;
 
-                    // Set a success message
                     $_SESSION['success_message'] = "Login successful. Welcome $username!";
+
+                    // Reset any failed login attempts
+                    $stmt = $conn->prepare("DELETE FROM failed_logins WHERE email = :email");
+                    $stmt->bindParam(':email', $email);
+                    $stmt->execute();
 
                     // Redirect based on role
                     if ($role === 'student') {
-                        header("Location: ./dashboard.php");  // Use relative path
+                        header("Location: ./dashboard.php");
                     } else {
                         header("Location: ./admin_dashboard.php");
                     }
-                    exit;  // Important: stop script execution after header
+                    exit;
                 } else {
-                    $error_message = "Invalid email or password.";
+                    // Log the failed login attempt
+                    $stmt = $conn->prepare("INSERT INTO failed_logins (user_id, email) VALUES (:user_id, :email)");
+                    $stmt->bindParam(':user_id', $user_id);
+                    $stmt->bindParam(':email', $email);
+                    $stmt->execute();
+
+                    $_SESSION['error_message'] = "Invalid password. Please try again.";
                 }
             } else {
-                $error_message = "Invalid email or password.";
+                $_SESSION['error_message'] = "No account found with that email.";
             }
         } catch (PDOException $e) {
-            $error_message = "Database error: " . $e->getMessage();
+            $_SESSION['error_message'] = "Database error: " . $e->getMessage();
         }
     }
+
+    header("Location: /SoftwareS/login.php");
+    exit;
 }
-ob_end_flush();  // End output buffering
+
+ob_end_flush();
+
 ?>
