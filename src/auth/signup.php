@@ -71,7 +71,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $log_stmt->execute();
 
             // Redirect to the login page after successful registration
-            header("Location: login.php");
+            header("Location: /SoftwareSecurityCw/login.php");
             exit(); // Ensure the script stops after the redirect
         } else {
             $error_message = "Error occurred during registration. Please try again.";
