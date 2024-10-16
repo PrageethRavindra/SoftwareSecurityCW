@@ -18,8 +18,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $_SESSION['error_message'] = "Please fill in all fields.";
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $_SESSION['error_message'] = "Please enter a valid email address.";
-    } elseif (strlen($pass) < 6) {
-        $_SESSION['error_message'] = "Password must be at least 6 characters long.";
+    } elseif (strlen($pass) < 8 || !preg_match('/[a-zA-Z]/', $pass) || !preg_match('/\d/', $pass)) {
+        $_SESSION['error_message'] = "Password must be at least 8 characters long and include both letters and numbers.";
     } else {
         try {
             // Check for existing failed login attempts within the last 5 minutes
@@ -38,7 +38,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
                 if ($time_since_last_attempt < $lock_duration) {
                     $_SESSION['error_message'] = "Your account has been locked due to too many failed login attempts. Please try again after " . (5 - floor($time_since_last_attempt / 60)) . " minutes.";
-                    header("Location: /SoftwareS/login.php");
+                    header("Location: /SoftwareSecurityCw/login.php");
                     exit;
                 } else {
                     // Reset failed attempts after lock duration has expired
@@ -99,7 +99,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
     }
 
-    header("Location: /login.php");
+    header("Location: /SoftwareSecurityCw/login.php");
     exit;
 }
 
